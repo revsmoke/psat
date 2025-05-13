@@ -59,8 +59,6 @@
 
 *Details live in **[spec/PSAT-v0.1.md](spec/PSAT-v0.1.md)**.*
 
----
-
 ## 🚀 Quick Start (dev sandbox)
 
 ```bash
@@ -93,8 +91,6 @@ generates a PSAT for POST /v1/echo, and responds with
 provider URL and performs the fetch.
  3. Provider verifier (examples/express-provider.ts) validates the signature
 & claims before echoing the payload.
-
-⸻
 
 ### 🔐 Security in One Slide
 
