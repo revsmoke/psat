@@ -8,11 +8,11 @@
 
 ---
 
-### 1  Purpose
+### 1.0  Purpose
 
 Provide a browser‑friendly, secret‑less authentication pattern—similar to AWS S3 pre‑signed URLs—for *any* REST/GraphQL endpoint. A **PSAT** is a short‑lived, signed capability that authorises exactly one HTTP action (or a tightly scoped series of actions) without exposing long‑term credentials to client‑side JavaScript or WASM.
 
-### 2  Scope & Non‑Goals
+### 2.0  Scope & Non‑Goals
 
 | In‑Scope                                            | Out‑of‑Scope                                 |
 | --------------------------------------------------- | -------------------------------------------- |
@@ -21,7 +21,7 @@ Provide a browser‑friendly, secret‑less authentication pattern—similar to 
 | Reference Edge‑worker vending + provider middleware | Full quota & billing design                  |
 | Body‑hash binding & replay protection               | Revocation lists for >10 min tokens          |
 
-### 3  Terminology
+### 3.0  Terminology
 
 | Term                | Meaning                                                                                      |
 | ------------------- | -------------------------------------------------------------------------------------------- |
@@ -30,7 +30,7 @@ Provide a browser‑friendly, secret‑less authentication pattern—similar to 
 | **Consumer**        | Browser or WASM client calling the Provider using a PSAT.                                    |
 | **PSAT**            | Pre‑Signed Action Token. A compact, tamper‑evident string (JWT/Biscuit/etc.).                |
 
-### 4  High‑Level Flow
+### 4.0  High‑Level Flow
 
 1. **Consumer ➜ Vending Service** — requests a PSAT for *method + path + body*.
 2. **Vending Service** — verifies user/session, signs the PSAT, returns it.
@@ -42,7 +42,7 @@ Browser ---[no secret]---> Provider  X   (rejected)
 Browser ---[PSAT]-------> Provider  √
 ```
 
-### 5  PSAT Token Structure
+### 5.0  PSAT Token Structure
 
 **Note on path normalization:** The `p` (path) claim must be canonicalised before signing and verification. This includes decoding percent-encoded sequences, removing trailing slashes, collapsing duplicate slashes, and excluding the query string (i.e., the `p` value should only represent the pathname component). This ensures consistent verification and prevents subtle mismatches between issuing and receiving systems.
 
@@ -75,14 +75,14 @@ Browser ---[PSAT]-------> Provider  √
 | `origin`      | Bind PSAT to browser origin (`https://app.example.com`)                                            |
 | `xhdr`        | Array of extra header names included in hash (e.g. `['Content‑Type']`)                             |
 
-### 6  Passing the Token
+### 6.0  Passing the Token
 
 * **Query parameter** : `?sig=<psat>`
 * **HTTP header** : `X‑PSAT: <psat>`
 
 Provider MUST accept one form and MAY accept both. Query form is cache‑friendly; header form hides token from logs.
 
-### 7  Signing Algorithms
+### 7.0  Signing Algorithms
 
 | `alg`               | Key size      | Notes                                                        |
 | ------------------- | ------------- | ------------------------------------------------------------ |
@@ -92,7 +92,7 @@ Provider MUST accept one form and MAY accept both. Query form is cache‑friendl
 
 Public keys SHOULD be distributed via JWKS (`/.well‑known/jwks.json`).
 
-### 8  Verification Procedure (Provider)
+### 8.0  Verification Procedure (Provider)
 
 ```pseudo
 claims = verify_signature(psat)
@@ -106,7 +106,7 @@ apply_quota(claims.sub, claims.quota)
 
 Verification SHOULD be constant‑time to avoid timing attacks.
 
-### 9  Security Considerations
+### 9.0  Security Considerations
 
 * **TTL** — 1‑5 min recommended. Shorter if PSAT is embedded in HTML.
 * **Body Hash** — prevents replay with altered payloads.
@@ -114,7 +114,7 @@ Verification SHOULD be constant‑time to avoid timing attacks.
 * **Revocation** — keep `exp` short; for longer ops use `kid` + OCSP‑style revocation.
 * **Logging** — avoid logging full PSAT; log `iat`, `sub`, `p`, `m` instead.
 
-### 10  Example End‑to‑End Flow
+### 10.0  Example End‑to‑End Flow
 
 ```bash
 # 1. Browser asks for capability
@@ -129,7 +129,7 @@ curl -X POST 'https://api.example.com/v1/chat/completions?sig=eyJhbGci…' \
      -d '{"messages":[…]}'
 ```
 
-### 11  Test Vector
+### 11.0  Test Vector
 
 JWT header:
 
@@ -154,13 +154,13 @@ Payload:
 
 Signature (hex): `8421…`  *(Ed25519 sign of header||"."||payload)*
 
-### 12  Reference Implementations
+### 12.0  Reference Implementations
 
 * **Edge Vending Service (TypeScript, Cloudflare Workers)** — `./examples/worker‑vending.ts`
 * **Node.js Provider Middleware** — Express `verifyPsat()` example under `./examples/express‑provider.ts`
 * **Browser Helper** — `psatFetch(method, path, body)` returns `Response`
 
-### 13  Future Work
+### 13.0 Future Work
 
 * Streaming bodies (chunked‑hash or SigV4‑style continuation)
 * WebSocket & HTTP/3 DATAGRAM binding
@@ -168,7 +168,7 @@ Signature (hex): `8421…`  *(Ed25519 sign of header||"."||payload)*
 
 ---
 
-### 14  Changelog
+### 14.0  Changelog
 
 | Version    | Date       | Notes          |
 | ---------- | ---------- | -------------- |
