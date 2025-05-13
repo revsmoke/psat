@@ -1,6 +1,6 @@
 # Pre‑Signed Action Token (PSAT)
 
-## Mini Specification v0.1 (Draft)
+## Mini Specification v0.1.1 (Draft)
 
 > **Status:** Draft for community feedback.
 > **Authors:** Bryan Rice & ChatGPT (OpenAI)
