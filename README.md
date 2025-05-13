@@ -77,11 +77,17 @@ npm run dev   # starts Miniflare + HTTPS tunnel
 curl -X POST 'https://localhost:8787/v1/echo' \
      -H 'Content-Type: application/json' \
      -d '{"msg":"hello"}'
+```
 
 Under the hood:
+
  1. Edge Worker (examples/edge-vending-worker.ts) checks your cookie/session,
 generates a PSAT for POST /v1/echo, and responds with
+
+```json
 {"sig":"<jwt>"}.
+```
+
  2. Browser helper (examples/browser-helper.js) appends the token to the real
 provider URL and performs the fetch.
  3. Provider verifier (examples/express-provider.ts) validates the signature
@@ -97,7 +103,9 @@ provider URL and performs the fetch.
  • Full analysis in Appendix A of the spec
 
 ⸻
+
 ### Examples
+
 src/examples/
 ├─ edge-vending-worker.ts   # Cloudflare Worker (token mint)
 ├─ express-provider.ts      # Node/Express API that verifies PSAT
@@ -112,11 +120,10 @@ src/examples/
 ├─ express-provider.ts      # Node/Express API that verifies PSAT
 └─ browser-helper.js        # Tiny fetch wrapper for the browser
 
+---
 
+#### edge-vending-worker.ts
 
-⸻
-
-1  edge-vending-worker.ts
 ```js
 /**
  * Cloudflare Worker — PSAT “vending” service
@@ -211,9 +218,7 @@ function json (data: unknown, maxAge = 0) {
 
 Deploy with wrangler deploy (Cloudflare) or equivalent edge runtime.
 
-⸻
-
-2  express-provider.ts
+#### express-provider.ts
 
 ```js
 /**
@@ -286,9 +291,7 @@ function sha256Hex (data: string) {
 }
 ```
 
----
-
-3  browser-helper.js
+#### browser-helper.js
 
 ```js
 /**
@@ -345,7 +348,7 @@ async function sha256Hex (str) {
 
 ---
 
-🔗 Wiring it up locally
+### 🔗 Wiring it up locally
 
 Piece Command
 
@@ -357,7 +360,7 @@ With the three example files you have a round-trip prototype: browser → edge v
 
 ---
 
-🗺 Roadmap
+## 🗺 Roadmap
 
 Phase Goal
 0.1 Publish draft spec + reference Edge Worker & Express verifier
@@ -367,7 +370,7 @@ Phase Goal
 
 ---
 
-🤝 Contributing
+## 🤝 Contributing
 
  1. Fork → Feature branch → PR.
  2. If you’re proposing spec text, prefix the branch with spec/ and open a
@@ -379,7 +382,8 @@ We follow the Contributor Covenant v2.1.
 
 ---
 
-📄 License
+## 📄 License
+
  • Specification & docs – Creative Commons CC-BY-4.0
  • Source code – Apache 2.0
 
