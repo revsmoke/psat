@@ -39,6 +39,8 @@
 
 **Flow Diagram:**
 
+```text
+
 +---------+       ① wants to do "POST /v1/chat"
 | Browser |-----------------------------------+
 +---------+                                    |
@@ -52,6 +54,8 @@
 +---------+   ④ fetch signed URL with body --->+------------------+
 | Browser |----------------------------------->|   Provider API   |
 +---------+          (no secret keys)          +------------------+
+
+```
 
 *Details live in **[spec/PSAT-v0.1.md](spec/PSAT-v0.1.md)**.*
 
