@@ -9,7 +9,7 @@
 > **TL;DR** – PSATs are short-lived, signed URLs (or headers) that authorise **one
 > specific API call**—method, path, body, quota—without shipping long-term
 > secrets to the browser or WASM client.  
-> Think *"S3 pre-signed URL, but for any REST/GraphQL endpoint."*
+> Think *“S3 pre-signed URL, but for any REST/GraphQL endpoint.”*
 
 ---
 
@@ -24,7 +24,7 @@
 
 ---
 
-## �� How it Works (bird's-eye)
+## 🏗 How it Works (bird’s-eye)
 
 1. **Browser** wants to make a `POST /v1/chat` request.
 
@@ -59,6 +59,8 @@
 
 *Details live in **[spec/PSAT-v0.1.md](spec/PSAT-v0.1.md)**.*
 
+---
+
 ## 🚀 Quick Start (dev sandbox)
 
 ```bash
@@ -80,11 +82,13 @@ curl -X POST 'https://localhost:8787/v1/echo' \
 ### Under the hood
 
  1. Edge Worker (examples/edge-vending-worker.ts) checks your cookie/session,
-generates a PSAT for POST /v1/echo, and responds with {"sig":"`jwt`"} .
+generates a PSAT for POST /v1/echo, and responds with {"sig":"`jwt`"}.
  2. Browser helper (examples/browser-helper.js) appends the token to the real
 provider URL and performs the fetch.
  3. Provider verifier (examples/express-provider.ts) validates the signature
 & claims before echoing the payload.
+
+⸻
 
 ### 🔐 Security in One Slide
 
@@ -115,7 +119,7 @@ src/examples/
 
 ```js
 /**
- * Cloudflare Worker — PSAT "vending" service
+ * Cloudflare Worker — PSAT “vending” service
  *
  * POST /delegate        ➜ { sig: "<PSAT JWT>" }
  * GET  /jwks.json       ➜ JWKS with the public Ed25519 key
@@ -345,7 +349,7 @@ Piece Command
 * Provider node src/examples/express-provider.ts (needs JWKS_URL env)
 * Browser test In a local HTML/JS file: import { psatFetch } from './browser-helper.js'; psatFetch('POST','/v1/echo',{msg:'hi'}).then(console.log);
 
-With the three example files you have a round-trip prototype: browser → edge vending → provider → browser, no credential exposure. Tweak paths, origins, and env vars to fit your dev setup, and you're good to push them into the repo. 🛠️
+With the three example files you have a round-trip prototype: browser → edge vending → provider → browser, no credential exposure. Tweak paths, origins, and env vars to fit your dev setup, and you’re good to push them into the repo. 🛠️
 
 ---
 
@@ -362,7 +366,7 @@ Phase Goal
 ## 🤝 Contributing
 
  1. Fork → Feature branch → PR.
- 2. If you're proposing spec text, prefix the branch with spec/ and open a
+ 2. If you’re proposing spec text, prefix the branch with spec/ and open a
 Discussion first.
  3. Run npm run lint and npm test before pushing.
  4. See CONTRIBUTING.md for issue templates & coding style.
