@@ -86,8 +86,9 @@ generates a PSAT for POST /v1/echo, and responds with
 
 ```json
 {"sig":"<jwt>"}
-``` .
+```
 
+.
  2. Browser helper (examples/browser-helper.js) appends the token to the real
 provider URL and performs the fetch.
  3. Provider verifier (examples/express-provider.ts) validates the signature
