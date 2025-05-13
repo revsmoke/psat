@@ -355,11 +355,12 @@ With the three example files you have a round-trip prototype: browser → edge v
 
 ## 🗺 Roadmap
 
-Phase Goal
-0.1 Publish draft spec + reference Edge Worker & Express verifier
-0.2 Add streaming-body support (chunked hashes) & DPoP key-binding
-0.3 TypeScript SDK (psat-fetch) for easy browser integration
-0.4 Submit IETF Internet-Draft, gather wider feedback
+Phase 0 Goal
+
+01. Publish draft spec + reference Edge Worker & Express verifier
+02. Add streaming-body support (chunked hashes) & DPoP key-binding
+03. TypeScript SDK (psat-fetch) for easy browser integration
+04. Submit IETF Internet-Draft, gather wider feedback
 
 ---
 
