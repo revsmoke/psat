@@ -39,6 +39,20 @@
 
 **Flow Diagram:**
 
++---------+       ① wants to do "POST /v1/chat"
+| Browser |-----------------------------------+
++---------+                                    |
+                                              \|/
+                                     +------------------+
+                                     |  Your Auth Edge  |  (holds real API key)
+                                     +------------------+
+                                      ② verifies user session
+                                      ③ creates signed-action token
+                                              \|/
++---------+   ④ fetch signed URL with body --->+------------------+
+| Browser |----------------------------------->|   Provider API   |
++---------+          (no secret keys)          +------------------+
+
 *Details live in **[spec/PSAT-v0.1.md](spec/PSAT-v0.1.md)**.*
 
 ---
@@ -79,6 +93,265 @@ provider URL and performs the fetch.
  • Full analysis in Appendix A of the spec
 
 ⸻
+### Examples
+src/examples/
+├─ edge-vending-worker.ts   # Cloudflare Worker (token mint)
+├─ express-provider.ts      # Node/Express API that verifies PSAT
+└─ browser-helper.js        # Tiny fetch wrapper for the browser
+
+Below are minimal, self-contained example files that compile under current Node 18 +/Deno/Cloudflare Workers stacks and demonstrate the PSAT flow end-to-end.
+
+Naming / layout assumes
+
+src/examples/
+├─ edge-vending-worker.ts   # Cloudflare Worker (token mint)
+├─ express-provider.ts      # Node/Express API that verifies PSAT
+└─ browser-helper.js        # Tiny fetch wrapper for the browser
+
+
+
+⸻
+
+1  edge-vending-worker.ts
+```js
+/**
+ * Cloudflare Worker — PSAT “vending” service
+ *
+ * POST /delegate        ➜ { sig: "<PSAT JWT>" }
+ * GET  /jwks.json       ➜ JWKS with the public Ed25519 key
+ *
+ * Environment variables:
+ *   PRIVATE_KEY_PEM  Ed25519 PKCS8 PEM (one-line or multi-line)
+ *   KEY_ID           Stable kid shown in JWKS  (e.g. "psat-1")
+ *   AUDIENCE         Provider origin, e.g. "api.example.com"
+ */
+
+import { SignJWT, exportJWK, importPKCS8 } from 'jose'
+
+export default {
+  async fetch (req: Request, env: Env): Promise<Response> {
+    const { pathname } = new URL(req.url)
+
+    /* ───────── JWKS endpoint ───────── */
+    if (pathname === '/jwks.json') {
+      const jwk = await getPublicJwk(env)
+      return json({ keys: [jwk] }, 24 * 3600)       // cache 1 day
+    }
+
+    /* ───────── Capability mint ───────── */
+    if (pathname === '/delegate' && req.method === 'POST') {
+      const { m, p, bodySha, quota } = await req.json()
+
+      // Basic validation
+      if (!m || !p || !bodySha) {
+        return json({ error: 'm, p, bodySha required' }, 400)
+      }
+
+      const iat = Math.floor(Date.now() / 1000)
+      const exp = iat + 120            // 2-min TTL
+
+      const payload: Record<string, unknown> = {
+        sub: 'anon',                   // replace with your session id
+        iat, exp, m, p,
+        bsha: bodySha,
+        ...(quota && { quota })
+      }
+
+      const priv = await importPrivateKey(env)
+      const sig = await new SignJWT(payload)
+        .setProtectedHeader({ alg: 'EdDSA', kid: env.KEY_ID })
+        .setIssuer('edge.psat') // iss
+        .setAudience(env.AUDIENCE) // aud
+        .sign(priv)
+
+      return json({ sig })
+    }
+
+    /* ---------- fallback ---------- */
+    return new Response('Not found', { status: 404 })
+  }
+}
+
+/*──────────────── helpers ───────────────*/
+interface Env {
+  PRIVATE_KEY_PEM: string
+  KEY_ID: string
+  AUDIENCE: string
+}
+
+async function importPrivateKey (env: Env) {
+  return importPKCS8(env.PRIVATE_KEY_PEM, 'EdDSA')
+}
+
+let cachedJwk: any
+async function getPublicJwk (env: Env) {
+  if (cachedJwk) return cachedJwk
+  const priv = await importPrivateKey(env)
+  const jwk = await exportJWK(priv)
+  jwk.use = 'sig'
+  jwk.alg = 'EdDSA'
+  jwk.kid = env.KEY_ID
+  cachedJwk = jwk
+  return jwk
+}
+
+function json (data: unknown, maxAge = 0) {
+  return new Response(JSON.stringify(data), {
+    headers: {
+      'content-type': 'application/json',
+      ...(maxAge && { 'cache-control': `public, max-age=${maxAge}` })
+    }
+  })
+}
+```
+
+Deploy with wrangler deploy (Cloudflare) or equivalent edge runtime.
+
+⸻
+
+2  express-provider.ts
+
+```js
+/**
+ * Simple Express provider that verifies PSAT and echoes the body.
+ * Endpoints:
+ *   POST /v1/echo?sig=<psat>
+ *
+ * Env:
+ *   JWKS_URL   — full URL to vending worker's /jwks.json
+ *   AUDIENCE   — same audience string used in PSAT ('api.example.com')
+ */
+
+import express, { Request, Response, NextFunction } from 'express'
+import { createRemoteJWKSet, jwtVerify } from 'jose'
+import crypto from 'crypto'
+
+const { JWKS_URL, AUDIENCE = 'api.example.com' } = process.env
+if (!JWKS_URL) throw new Error('JWKS_URL must be set')
+
+/* Build a JWKS fetcher that auto-caches keys */
+const JWKS = createRemoteJWKSet(new URL(JWKS_URL))
+
+const app = express()
+app.use(express.json({ limit: '2mb' }))
+
+/* PSAT verification middleware */
+async function verifyPsat (req: Request, res: Response, next: NextFunction) {
+  try {
+    const psat = req.query.sig as string ?? req.get('x-psat')
+    if (!psat) throw new Error('Missing PSAT')
+
+    /* Verify signature & audience/expiry */
+    const { payload } = await jwtVerify(
+      psat,
+      JWKS,
+      { audience: AUDIENCE, issuer: 'edge.psat' }
+    )
+
+    /* Method + path check */
+    if (payload.m !== req.method) throw new Error('Method mismatch')
+    if (payload.p !== req.path)   throw new Error('Path mismatch')
+
+    /* Body hash check */
+    const raw = JSON.stringify(req.body ?? {})
+    const bsha = sha256Hex(raw)
+    if (payload.bsha !== bsha) throw new Error('Body hash mismatch')
+
+    /* Quota demo (tokens) */
+    // TODO: implement real quota if payload.quota
+
+    (req as any).psat = payload   // propagate if needed
+    next()
+  } catch (e) {
+    res.status(401).json({ error: (e as any).message })
+  }
+}
+
+/* Demo endpoint */
+app.post('/v1/echo', verifyPsat, (req, res) => {
+  res.json({ ok: true, echoed: req.body })
+})
+
+app.listen(4000, () =>
+  console.log('Provider listening on http://localhost:4000')
+)
+
+/* util */
+function sha256Hex (data: string) {
+  return crypto.createHash('sha256').update(data).digest('hex')
+}
+```
+
+---
+
+3  browser-helper.js
+
+```js
+/**
+ * Tiny helper that:
+ *   1. hashes the request body
+ *   2. asks the vending service for a PSAT
+ *   3. calls the provider with ?sig=<psat>
+ *
+ * Config constants below ⬇
+ */
+
+const VENDING_URL   = 'https://edge.example.dev/delegate'
+const PROVIDER_ORIG = 'https://api.example.dev'
+
+/**
+ * psatFetch('POST', '/v1/echo', { msg:'hello' })
+ */
+export async function psatFetch (method, path, bodyObj) {
+  const bodyStr = JSON.stringify(bodyObj)
+  const bodySha = await sha256Hex(bodyStr)
+
+  /* 1. mint capability */
+  const sig = await getSig({ m: method, p: path, bodySha })
+
+  /* 2. call provider */
+  const url = `${PROVIDER_ORIG}${path}?sig=${encodeURIComponent(sig)}`
+  const res = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: bodyStr
+  })
+  if (!res.ok) throw new Error(`provider error ${res.status}`)
+  return res.json()
+}
+
+/*———— helper fns ————*/
+async function getSig(payload) {
+  const res = await fetch(VENDING_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  if (!res.ok) throw new Error('PSAT vending failed')
+  return (await res.json()).sig
+}
+
+async function sha256Hex (str) {
+  const enc = new TextEncoder().encode(str)
+  const digest = await crypto.subtle.digest('SHA-256', enc)
+  return [...new Uint8Array(digest)]
+    .map(b => b.toString(16).padStart(2, '0')).join('')
+}
+```
+
+---
+
+🔗 Wiring it up locally
+
+Piece Command
+
+* Edge worker npx wrangler dev src/examples/edge-vending-worker.ts --env dev
+* Provider node src/examples/express-provider.ts (needs JWKS_URL env)
+* Browser test In a local HTML/JS file: import { psatFetch } from './browser-helper.js'; psatFetch('POST','/v1/echo',{msg:'hi'}).then(console.log);
+
+With the three example files you have a round-trip prototype: browser → edge vending → provider → browser, no credential exposure. Tweak paths, origins, and env vars to fit your dev setup, and you’re good to push them into the repo. 🛠️
+
+---
 
 🗺 Roadmap
 
@@ -88,10 +361,10 @@ Phase Goal
 0.3 TypeScript SDK (psat-fetch) for easy browser integration
 0.4 Submit IETF Internet-Draft, gather wider feedback
 
-
-⸻
+---
 
 🤝 Contributing
+
  1. Fork → Feature branch → PR.
  2. If you’re proposing spec text, prefix the branch with spec/ and open a
 Discussion first.
@@ -100,14 +373,13 @@ Discussion first.
 
 We follow the Contributor Covenant v2.1.
 
-⸻
+---
 
 📄 License
  • Specification & docs – Creative Commons CC-BY-4.0
  • Source code – Apache 2.0
 
-⸻
+---
 
 Made with ☕ and ideas from the web-dev community. Join the discussion in
 GitHub Discussions or #psat on Mastodon/@Fediverse!
-

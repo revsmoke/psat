@@ -1,0 +1,33 @@
+{
+  "name": "psat",
+  "version": "1.0.0",
+  "description": "* *Secret-less API capabilities for browser-first apps*",
+  "main": "index.js",
+  "scripts": {
+  "dev": "miniflare src/examples/edge-vending-worker.ts --watch --live-reload",
+  "lint": "eslint . --ext .js,.ts",
+  "build": "esbuild src/examples/edge-vending-worker.ts --bundle --format=esm --outfile=dist/worker.js",
+  "test": "jest"
+},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/revsmoke/psat.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/revsmoke/psat/issues"
+  },
+  "homepage": "https://github.com/revsmoke/psat#readme",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250513.0",
+    "esbuild": "^0.25.4",
+    "eslint": "^9.26.0",
+    "jest": "^29.7.0",
+    "jose": "^6.0.11",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3"
+  }
+}
+
