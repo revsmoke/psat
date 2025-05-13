@@ -79,15 +79,16 @@ curl -X POST 'https://localhost:8787/v1/echo' \
      -d '{"msg":"hello"}'
 ```
 
-Under the hood:
+### Under the hood
 
  1. Edge Worker (examples/edge-vending-worker.ts) checks your cookie/session,
 generates a PSAT for POST /v1/echo, and responds with
 
 ```json
-{"sig":"<jwt>"}.
+{"sig":"<jwt>"}
 ```
 
+.
  2. Browser helper (examples/browser-helper.js) appends the token to the real
 provider URL and performs the fetch.
  3. Provider verifier (examples/express-provider.ts) validates the signature
@@ -95,30 +96,28 @@ provider URL and performs the fetch.
 
 ⸻
 
-🔐 Security in One Slide
- • 1–5 minute TTL (exp)
- • Method, path and SHA-256(body) locked in claims
- • Optional origin ties token to a specific web origin
- • Ed25519 signatures; public keys served via JWKS
- • Full analysis in Appendix A of the spec
+### 🔐 Security in One Slide
+
+* 1–5 minute TTL (exp)
+* Method, path and SHA-256(body) locked in claims
+* Optional origin ties token to a specific web origin
+* Ed25519 signatures; public keys served via JWKS
+* Full analysis in Appendix A of the spec
 
 ⸻
 
 ### Examples
 
-src/examples/
-├─ edge-vending-worker.ts   # Cloudflare Worker (token mint)
-├─ express-provider.ts      # Node/Express API that verifies PSAT
-└─ browser-helper.js        # Tiny fetch wrapper for the browser
-
 Below are minimal, self-contained example files that compile under current Node 18 +/Deno/Cloudflare Workers stacks and demonstrate the PSAT flow end-to-end.
 
 Naming / layout assumes
 
+```text
 src/examples/
 ├─ edge-vending-worker.ts   # Cloudflare Worker (token mint)
 ├─ express-provider.ts      # Node/Express API that verifies PSAT
 └─ browser-helper.js        # Tiny fetch wrapper for the browser
+```
 
 ---
 
