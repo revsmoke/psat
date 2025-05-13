@@ -42,6 +42,13 @@ Browser ---[no secret]---> Provider  [X]  (rejected)
 Browser ---[PSAT]--------> Provider  [√]
 ```
 
+#### 4.1  Vending Service Responsibilities & the `sub` Claim
+
+* **User authentication first** — the Vending Service MUST authenticate the caller (cookie / JWT / OAuth / mTLS) **before** minting a PSAT.
+* **Stable mapping** — populate `sub` with a stable identifier such as the user‑ID, service‑account, or unguessable session‑ID. This value is what the Provider will log and quota‑track.
+* **Auth strength propagation (optional)** — if multiple auth levels exist (e.g. MFA vs SSO), encode them in a custom claim (`auth_lvl`) so the Provider can enforce stronger policies.
+* **No anonymous tokens** — issuing a PSAT with `sub:"anon"` SHOULD be limited to public, read‑only endpoints with tight rate limits.
+
 ### 5  PSAT Token Structure
 
 **Note on path normalization:** The `p` (path) claim must be canonicalised before signing and verification. This includes decoding percent-encoded sequences, removing trailing slashes, collapsing duplicate slashes, and excluding the query string (i.e., the `p` value should only represent the pathname component). This ensures consistent verification and prevents subtle mismatches between issuing and receiving systems.
@@ -50,16 +57,16 @@ Browser ---[PSAT]--------> Provider  [√]
 
 #### 5.1  Required Claims
 
-| Claim  | Type                  | Example                                                                                      | Description                                    |
-| ------ | --------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| `iss`  | string                | `edge.example.com`                                                                           | Vending Service identifier / key id mapping    |
-| `aud`  | string                | `api.example.com`                                                                            | Hostname expected to verify the token          |
-| `exp`  | int (sec since epoch) | `1715616000`                                                                                 | Absolute expiry, SHOULD be ≤ 5 min after `iat` |
-| `iat`  | int                   | *autofilled*                                                                                 | Issued‑at                                      |
-| `sub`  | string                | `user‑123`                                                                                   | End‑user or session id for logging & quota     |
-| `m`    | string                | `POST`                                                                                       | HTTP method (UPPERCASE, RFC 9110)              |
-| `p`    | string                | `/v1/chat/completions`                                                                       | Normalised request path                        |
-| `bsha` | string                | SHA‑256 base64url-encoded hash of the request body (empty body ➜ hash of zero-length string) |                                                |
+| Claim  | Type                  | Example                                                                   | Description                                    |
+| ------ | --------------------- | ------------------------------------------------------------------------- | ---------------------------------------------- |
+| `iss`  | string                | `edge.example.com`                                                        | Vending Service identifier / key id mapping    |
+| `aud`  | string                | `api.example.com`                                                         | Hostname expected to verify the token          |
+| `exp`  | int (sec since epoch) | `1715616000`                                                              | Absolute expiry, SHOULD be ≤ 5 min after `iat` |
+| `iat`  | int                   | *autofilled*                                                              | Issued‑at                                      |
+| `sub`  | string                | `user‑123`                                                                | End‑user or session id for logging & quota     |
+| `m`    | string                | `POST`                                                                    | HTTP method (UPPERCASE, RFC 9110)              |
+| `p`    | string                | `/v1/chat/completions`                                                    | Normalised request path                        |
+| `bsha` | string                | SHA‑256 base64url-encoded hash of the request body (empty body ➜ hash of zero-length string) |                                    |
 
 #### 5.2  Optional Claims
 
@@ -97,9 +104,35 @@ assert req.path   == claims.p
 assert sha256(req.body) == claims.bsha
 if claims.origin: assert req.header(Origin) == claims.origin
 apply_quota(claims.sub, claims.quota)
-```
+````
 
 Verification SHOULD be constant‑time to avoid timing attacks.
+
+### 8.1  Provider Error Handling & Client UX
+
+Providers SHOULD expose deterministic errors so browsers can react gracefully:
+
+| HTTP Status | `code` (JSON body)          | When raised                                        | Recommended client action                  |
+| ----------- | --------------------------- | -------------------------------------------------- | ------------------------------------------ |
+| **498**     | `PSAT_INVALID_SIGNATURE`    | Bad signature, malformed token, body‑hash mismatch | Retry is pointless; re‑obtain a fresh PSAT |
+| **499**     | `PSAT_EXPIRED`              | `exp` elapsed or outside clock‑skew window         | Obtain new PSAT and retry                  |
+| **497**     | `PSAT_METHOD_PATH_MISMATCH` | `m` / `p` claims don’t match request               | Bug in client; log error                   |
+| **429**     | `PSAT_QUOTA_EXCEEDED`       | Quota claim exceeded or server rate‑limit tripped  | Exponential backoff / show throttling UI   |
+| **403**     | `PSAT_ORIGIN_MISMATCH`      | `origin` claim present but doesn’t match request   | Re‑issue PSAT from correct origin          |
+
+Error body example:
+
+```json
+{
+  "error": {
+    "code": "PSAT_EXPIRED",
+    "message": "The provided PSAT has expired. Request a new token and retry.",
+    "ts": "2025‑05‑13T16:31:00Z"
+  }
+}
+```
+
+Providers MAY also send `WWW‑Authenticate: Bearer error="invalid_token"` for compatibility with generic OAuth clients.
 
 ### 9  Security Considerations
 
@@ -165,10 +198,11 @@ Signature (hex): `8421…`  *(Ed25519 sign of header||"."||payload)*
 
 ### 14  Changelog
 
-| Version   | Date       | Notes                                                                                                                                |
-| --------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| **0.1.1** | 2025‑05‑13 | Deduplicated content, clarified `bsha` encoding, added `jti`, clock‑skew guidance, key‑rotation cadence, path canonicalisation note. |
-| 0.1 Draft | 2025‑05‑13 | Initial sketch                                                                                                                       |
+| Version   | Date       | Notes                                                                                                                                        |
+| --------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| **0.1.2** | 2025‑05‑13 | Added `sub` claim guidance for Vending Services and Provider-side error handling patterns with standard status codes and JSON body examples. |
+| **0.1.1** | 2025‑05‑13 | Deduplicated content, clarified `bsha` encoding, added `jti`, clock‑skew guidance, key‑rotation cadence, path canonicalisation note.         |
+| 0.1 Draft | 2025‑05‑13 | Initial sketch                                                                                                                               |
 
 \---------- | ---------- | -------------- |
 \|  0.1 Draft | 2025‑05‑13 | Initial sketch |
