@@ -37,14 +37,16 @@ Provide a browser‑friendly, secret‑less authentication pattern—similar to 
 3. **Consumer ➜ Provider** — performs the HTTP call, attaching PSAT via query param or header.
 4. **Provider** — verifies signature & claims, executes action, returns response.
 
-```
-Browser ---[no secret]---> Provider  ❌  (rejected)
-Browser ---[PSAT]-------> Provider  ✅
+```text
+Browser ---[no secret]---> Provider  X   (rejected)
+Browser ---[PSAT]-------> Provider  √
 ```
 
-### 5  PSAT Token Structure
+### 5  PSAT Token Structure
 
-**Encoding:** JWS compact serialization (JWT) using EdDSA (`Ed25519`). Alternative formats (Biscuit, Macaroon) MAY be adopted in future versions.
+**Note on path normalization:** The `p` (path) claim must be canonicalised before signing and verification. This includes decoding percent-encoded sequences, removing trailing slashes, collapsing duplicate slashes, and excluding the query string (i.e., the `p` value should only represent the pathname component). This ensures consistent verification and prevents subtle mismatches between issuing and receiving systems.
+
+**Encoding:** JWS compact serialization (JWT) using EdDSA (`Ed25519`). Alternative formats (Biscuit, Macaroon) MAY be adopted in future versions. **Encoding:** JWS compact serialization (JWT) using EdDSA (`Ed25519`). Alternative formats (Biscuit, Macaroon) MAY be adopted in future versions.
 
 #### 5.1  Required Claims
 
@@ -61,11 +63,17 @@ Browser ---[PSAT]-------> Provider  ✅
 
 #### 5.2  Optional Claims
 
-| Claim         | Purpose                                                                |
-| ------------- | ---------------------------------------------------------------------- |
-| `quota` (obj) | `{tokens:1024}` — provider‑specific usage budget                       |
-| `origin`      | Bind PSAT to browser origin (`https://app.example.com`)                |
-| `xhdr`        | Array of extra header names included in hash (e.g. `['Content‑Type']`) |
+| Claim         | Purpose                                                                                            |
+| ------------- | -------------------------------------------------------------------------------------------------- |
+| `quota` (obj) | `{tokens:1024}` — provider‑specific usage budget                                                   |
+| `origin`      | Bind PSAT to browser origin (`https://app.example.com`)                                            |
+| `xhdr`        | Array of extra header names included in hash (e.g. `['Content‑Type']`)                             |
+| `jti`         | Optional JWT ID — unique token ID for optional revocation tracking in memory (short TTL deny-list) |
+| Claim         | Purpose                                                                                            |
+| -------       | ---------                                                                                          |
+| `quota` (obj) | `{tokens:1024}` — provider‑specific usage budget                                                   |
+| `origin`      | Bind PSAT to browser origin (`https://app.example.com`)                                            |
+| `xhdr`        | Array of extra header names included in hash (e.g. `['Content‑Type']`)                             |
 
 ### 6  Passing the Token
 
@@ -123,8 +131,6 @@ curl -X POST 'https://api.example.com/v1/chat/completions?sig=eyJhbGci…' \
 
 ### 11  Test Vector
 
-<details><summary>Click to expand</summary>
-
 JWT header:
 
 ```json
@@ -147,8 +153,6 @@ Payload:
 ```
 
 Signature (hex): `8421…`  *(Ed25519 sign of header||"."||payload)*
-
-</details>
 
 ### 12  Reference Implementations
 
@@ -192,12 +196,14 @@ Signature (hex): `8421…`  *(Ed25519 sign of header||"."||payload)*
 
 ### A.2 Token Leakage Blast Radius
 
-1. **Time window = `exp – now`** — default spec recommends ≤ 300 s.
+1. \*\*Time window = \*\*\`\` — default spec recommends ≤ 300 s.
 2. Bound to **single (method,path,body)** tuple: replay on any other payload → verification fails.
 3. *Optional* `origin` binds token to browser origin, thwarting XSRF‑style theft.
 4. *Optional* DPoP‑style public‑key binding (future v0.2) would restrict use to same JS runtime instance.
 
 ### A.3 Recommended Defaults (Provider‑side)
+
+Implementations SHOULD assume a maximum allowable clock skew of ±60 seconds when verifying the `iat` and `exp` claims, to accommodate minor desynchronization between client and server clocks.
 
 | Setting                       | Safe Default                                            |
 | ----------------------------- | ------------------------------------------------------- |
@@ -206,9 +212,20 @@ Signature (hex): `8421…`  *(Ed25519 sign of header||"."||payload)*
 | Accepted algorithms           | `EdDSA` or `ES256` only                                 |
 | Maximum body size per PSAT    | Application‑specific; enforce in claims (`quota.bytes`) |
 | Max concurrent PSAT per `sub` | e.g. 5 outstanding to limit token hoarding              |
+| Setting                       | Safe Default                                            |
+| ---------                     | --------------                                          |
+| `exp` TTL                     | ≤ 5 min (120 s ideal for interactive UI)                |
+| Clock skew tolerance          | ± 60 s                                                  |
+| Accepted algorithms           | `EdDSA` or `ES256` only                                 |
+| Maximum body size per PSAT    | Application‑specific; enforce in claims (`quota.bytes`) |
+| Max concurrent PSAT per `sub` | e.g. 5 outstanding to limit token hoarding              |
 
 ### A.4 Key Management & Rotation
 
+* **JWKS versioning** — publish new key under fresh `kid`; overlap old+new for <24 h. During this grace period, providers MUST accept both the old and new keys for verification to prevent downtime during rotation.
+* **Edge vendor key** should live in HSM/KMS; CI deploys JWKS automatically.
+* **Rotation cadence** — rotate signing keys every 90 days at minimum; shorter if dictated by organizational policy or external audits.
+* **Revocation** — publish `denylist` of `(kid, jti)` if medium‑TTL tokens become necessary; spec leaves this optional.
 * **JWKS versioning** — publish new key under fresh `kid`; overlap old+new for <24 h.
 * **Edge vendor key** should live in HSM/KMS; CI deploys JWKS automatically.
 * **Revocation** — publish `denylist` of `(kid, jti)` if medium‑TTL tokens become necessary; spec leaves this optional.
